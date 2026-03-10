@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: weather-saas-api
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn data_dashboard.wsgi:application
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.2

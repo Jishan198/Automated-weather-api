@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Automated Data Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+    <div class="container mt-5">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2>Weather Data Aggregation</h2>
+            <button class="btn btn-warning" id="premiumBtn">Upgrade to Premium</button>
+        </div>
+
+        <div class="card shadow-sm mb-4" id="loginCard">
+            <div class="card-body d-flex gap-2">
+                <input type="text" id="username" class="form-control" placeholder="Django Username">
+                <input type="password" id="password" class="form-control" placeholder="Django Password">
+                <button class="btn btn-primary" onclick="login()">Login</button>
+            </div>
+        </div>
+
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Max Temp (°C)</th>
+                            <th>Min Temp (°C)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="weatherTableBody">
+                        </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 1. Function to handle Login and get the JWT Token
+        function login() {
+            const user = document.getElementById('username').value;
+            const pass = document.getElementById('password').value;
+
+            fetch('/api/token/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username: user, password: pass })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.access) {
+                    // Save the key in the browser's memory
+                    localStorage.setItem('access_token', data.access);
+                    alert('Login successful! Unlocking data...');
+                    document.getElementById('loginCard').style.display = 'none'; // Hide login bar
+                    fetchData(); // Try fetching the table data again
+                } else {
+                    alert('Login failed. Check your credentials.');
+                }
+            });
+        }
+
+        // 2. Function to fetch secure data using the Token
+        function fetchData() {
+            const token = localStorage.getItem('access_token');
+            
+            fetch('/api/weather/', {
+                headers: { 'Authorization': 'Bearer ' + token } // Pass the key to Django!
+            })
+            .then(response => {
+                if (response.status === 401) {
+                    document.getElementById('weatherTableBody').innerHTML = `
+                        <tr><td colspan="3" class="text-danger text-center">
+                            🔒 401 Unauthorized: Please login above.
+                        </td></tr>`;
+                    throw new Error('Unauthorized');
+                }
+                return response.json();
+            })
+            .then(data => {
+                const tbody = document.getElementById('weatherTableBody');
+                tbody.innerHTML = ''; // Clear out the empty space
+                
+                data.forEach(stat => {
+                    const row = `<tr>
+                        <td>${new Date(stat.record_date).toLocaleDateString()}</td>
+                        <td>${stat.max_temp}</td>
+                        <td>${stat.min_temp}</td>
+                    </tr>`;
+                    tbody.innerHTML += row;
+                });
+            })
+            .catch(error => console.log('Fetch error:', error));
+        }
+// --- ADD THIS NEW CODE ---
+        document.getElementById('premiumBtn').addEventListener('click', function() {
+            const token = localStorage.getItem('access_token');
+            
+            if (!token) {
+                alert("Please login first before upgrading!");
+                return;
+            }
+
+            // Change button text so the user knows it's loading
+            this.innerText = "Redirecting to Stripe...";
+            this.disabled = true;
+
+            // Call your Django checkout endpoint
+            fetch('/api/checkout/', {
+                method: 'POST',
+                headers: { 
+                    'Authorization': 'Bearer ' + token,
+                    'Content-Type': 'application/json' 
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.checkout_url) {
+                    // Success! Send the user to the Stripe hosted payment page
+                    window.location.href = data.checkout_url;
+                } else {
+                    alert('Error creating checkout session.');
+                    this.innerText = "Upgrade to Premium";
+                    this.disabled = false;
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                this.innerText = "Upgrade to Premium";
+                this.disabled = false;
+            });
+        });
+        
+        // 3. When the page loads, try to fetch the data immediately
+        document.addEventListener('DOMContentLoaded', function() {
+            fetchData();
+        });
+    </script>
+</body>
+</html>

@@ -1,9 +1,46 @@
 services:
+  # 1. The Web Server (Django)
   - type: web
-    name: weather-saas-api
-    runtime: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn data_dashboard.wsgi:application
+    name: weather-api-web
+    env: python
+    buildCommand: "pip install -r requirements.txt && python manage.py migrate"
+    startCommand: "gunicorn data_dashboard.wsgi:application"
     envVars:
-      - key: PYTHON_VERSION
-        value: 3.12.2
+      - key: DATABASE_URL
+        fromDatabase:
+          name: weather-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: weather-redis
+          property: connectionString
+
+  # 2. The Background Worker (Celery)
+  - type: worker
+    name: weather-celery-worker
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "celery -A data_dashboard worker -l info"
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: weather-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: weather-redis
+          property: connectionString
+
+  # 3. Redis Instance
+  - type: redis
+    name: weather-redis
+    ipAllowList: [] # Only allow internal connections for security
+
+databases:
+  # 4. Managed MySQL Database
+  - name: weather-db
+    databaseName: weather_data
+    user: jishan
+    plan: free # Or starter depending on your Render account
